@@ -1,0 +1,8 @@
+resolver: lts-12.20
+packages:
+- .
+extra-deps:
+- proto-lens-0.4.0.0
+- proto-lens-runtime-0.4.0.1
+- lens-labels-0.3.0.1
+- text-format-0.3.2
