@@ -178,10 +178,10 @@ initialState args fds =
     defaultFocus =
         focusRing [ InitialView
                   , SearchField
-                  , FilesDigest
-                  , ServicesDigest
-                  , MethodsDigest
                   , MessagesDigest
+                  , MethodsDigest
+                  , ServicesDigest
+                  , FilesDigest
                   ]
 
 match :: HasLens' a "name" Text => Search -> a -> Bool
@@ -285,17 +285,16 @@ draw = \case
     Running rs ->
       [ hBox
         [ vBox
-          [ viewFilesList $ _stateFilteredFilesList rs
-          , viewServicesList $ _stateFilteredServicesList rs
-          , viewMethodsList $ _stateFilteredMethodsList rs
+          [ fdBodyViewPort $ rs
+          , viewSearchForm $ rs
           ]
         , vBox
           [ viewNestedMessagesList $ _stateFilteredMessagesList rs
-          -- , viewFieldsList $ _stateFilteredFieldsList rs
           ]
         , vBox
-          [ fdBodyViewPort $ rs
-          , viewSearchForm $ rs
+          [ viewMethodsList $ _stateFilteredMethodsList rs
+          , viewServicesList $ _stateFilteredServicesList rs
+          , viewFilesList $ _stateFilteredFilesList rs
           ]
         ]
       ]
