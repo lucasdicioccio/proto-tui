@@ -63,6 +63,9 @@ handleEvent s0 = \case
       -> continue $ over _Running (stateFocus %~ focusNext) s0
     VtyEvent (Vty.EvKey (Vty.KBackTab) _)
       -> continue $ over _Running (stateFocus %~ focusPrev) s0
+    -- | Zoom toggle.
+    VtyEvent (Vty.EvKey (Vty.KChar 'z') _)
+      -> continue $ over _Running (stateZoomed %~ toggleZoomed) s0
     -- | General event
     ev@(VtyEvent vtyEv)
       -> case getFocus s0 of
@@ -145,22 +148,31 @@ draw = \case
       [ errorui err
       , viewErrorHelp args
       ]
-    Running rs ->
-      [ hBox
-        [ vBox
-          [ fdBodyViewPort $ rs
-          , viewSearchForm $ rs
+    Running rs -> case rs ^. stateZoomed of
+        Zoomed ->
+          [ hBox
+            [ vBox
+              [ fdBodyViewPort $ rs
+              , viewSearchForm $ rs
+              ]
+            ]
           ]
-        , vBox
-          [ viewNestedMessagesList $ _stateFilteredMessagesList rs
+        UnZoomed ->
+          [ hBox
+            [ vBox
+              [ fdBodyViewPort $ rs
+              , viewSearchForm $ rs
+              ]
+            , vBox
+              [ viewNestedMessagesList $ _stateFilteredMessagesList rs
+              ]
+            , vBox
+              [ viewMethodsList $ _stateFilteredMethodsList rs
+              , viewServicesList $ _stateFilteredServicesList rs
+              , viewFilesList $ _stateFilteredFilesList rs
+              ]
+            ]
           ]
-        , vBox
-          [ viewMethodsList $ _stateFilteredMethodsList rs
-          , viewServicesList $ _stateFilteredServicesList rs
-          , viewFilesList $ _stateFilteredFilesList rs
-          ]
-        ]
-      ]
 
 viewSearchForm :: RunningState -> Widget WName
 viewSearchForm rs =
@@ -306,6 +318,7 @@ viewWelcome =
   <=> txt "- use TAB(Back-TAB) to cycle through panes"
   <=> txt "- use up/down to select in lists"
   <=> txt "- use hjkl to move this window"
+  <=> txt "- use z to zoom/unzoom this window"
   <=> txt "- type in case-insentive search"
 
 viewSearch :: Form Search AppEvent WName -> Widget WName

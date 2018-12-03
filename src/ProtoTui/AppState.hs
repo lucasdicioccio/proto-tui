@@ -44,10 +44,17 @@ data AppError =
 
 type AppEvent = ()
 
+data Zoomed = UnZoomed | Zoomed
+
+toggleZoomed :: Zoomed -> Zoomed
+toggleZoomed UnZoomed = Zoomed
+toggleZoomed Zoomed   = UnZoomed
+
 data RunningState = RunningState {
     _stateProtocArgs        :: !ProtocArguments
   , _stateFileDescriptorSet :: !FileDescriptorSet
   , _stateCurrentSearch     :: Form Search AppEvent WName
+  , _stateZoomed            :: !Zoomed
   -- filter results
   , _stateFilteredFilesList     :: List WName FileDescriptorProto
   , _stateFilteredServicesList  :: List WName ServiceDescriptorProto
@@ -108,6 +115,7 @@ makeState args fds searchStr focus =
   where
     _stateProtocArgs = args
     _stateFileDescriptorSet = fds
+    _stateZoomed = UnZoomed
     _stateCurrentSearch =
         newForm [ editTextField searchText SearchField (Just 1) ] searchStr
     _stateFocus = focus
