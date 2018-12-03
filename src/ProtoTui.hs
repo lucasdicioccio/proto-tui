@@ -125,6 +125,8 @@ handleViewPort s0 = \case
           let vp = viewportScroll InitialView
           vScrollPage vp Down
           continue s0
+    VtyEvent (Vty.EvKey Vty.KBS _)
+      -> continue $ over _Running (stateFocus %~ focusSetCurrent SearchField) s0
     ev
       -> continue s0
 
