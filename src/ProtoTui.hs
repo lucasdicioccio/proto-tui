@@ -8,7 +8,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Lib where
+module ProtoTui where
 
 import Brick
 import Brick.Focus
@@ -33,10 +33,6 @@ import qualified Data.Text.Lazy as LazyText
 import qualified Data.Vector as Vector
 import Data.Text.Format
 
-import Data.ProtoLens.Encoding (decodeMessage, decodeMessageOrDie)
-import System.Process.ByteString (readCreateProcessWithExitCode)
-import System.Process (proc)
-
 import Control.Lens
 import Data.ProtoLens.TextFormat
 import Proto.Google.Protobuf.Descriptor
@@ -44,151 +40,18 @@ import Proto.Google.Protobuf.Descriptor_Fields
 
 import qualified Graphics.Vty as Vty
 import qualified Graphics.Vty.Attributes as Vty
-import System.Directory (findExecutable)
-import System.Exit (ExitCode(..))
 import System.Environment (getArgs)
 
-import Lens.Labels (HasLens')
+import ProtoTui.Search
+import ProtoTui.AppState
+import ProtoTui.Protoc
 
-type ProtocArguments = [String]
-
--- | Compiles a proto to a file-descriptor-set.
---
--- This function is useful when someone wants to use GHCi to explore protos
--- directly.
-unsafeProtoc :: ProtocArguments -> IO FileDescriptorSet
-unsafeProtoc args = do
-    let createProtocProcess = proc "protoc" ("-o/dev/stdout" : args)
-    (!_,!bs,!_) <- readCreateProcessWithExitCode createProtocProcess ""
-    pure $ decodeMessageOrDie bs
-
--- | Application widgets names.
-data WName
-  = InitialView
-  | FilesDigest -- ^ a digest showing per-file statistics
-  | MessagesDigest -- ^ a digest showing per-messages statistics
-  | ServicesDigest -- ^ a digest showing per-service statistics
-  | MethodsDigest -- ^ a digest showing per-method statistics
-  | SearchField
-  | ErrorHelp
-  deriving (Show, Eq, Ord)
-
--- | Application errooooooooooooooooored.
-data AppError =
-    ProtocIsNotFound
-  | ProtocCompileFailure Int ByteString
-  | ProtocResultParsingError String
-
-data Search = Search {
-    _searchText :: !Text
-  } deriving (Show, Eq, Ord)
-
-makeLenses ''Search
-
-type AppEvent = ()
-
-data RunningState = RunningState {
-    _stateProtocArgs        :: !ProtocArguments
-  , _stateFileDescriptorSet :: !FileDescriptorSet
-  , _stateCurrentSearch     :: Form Search AppEvent WName
-  -- filter results
-  , _stateFilteredFilesList     :: List WName FileDescriptorProto
-  , _stateFilteredServicesList  :: List WName ServiceDescriptorProto
-  , _stateFilteredMethodsList   :: List WName MethodDescriptorProto
-  , _stateFilteredMessagesList  :: List WName DescriptorProto
-  -- proper interactions
-  , _stateFocus                 :: FocusRing WName
-  }
-makeLenses ''RunningState
-
--- | The application state.
-data AppState =
-    Errored !ProtocArguments !AppError
-  | Running !RunningState
-makePrisms ''AppState
-
-getFocus :: AppState -> Maybe WName
-getFocus s0 =
-    s0 ^? _Running . stateFocus >>= focusGetCurrent
 
 runMain :: IO ()
 runMain = do
     let app = App draw chooseCursor handleEvent startEvent makeAttrMap
     let initState = initProtoc =<< getArgs
     void $ defaultMain app =<< initState
-
--- | Looks for protoc on the PATH.
-findProtoc :: IO (Maybe FilePath)
-findProtoc = findExecutable "protoc"
-
--- | Loads the initial state from Protoc arguments.
-initProtoc :: ProtocArguments -> IO AppState
-initProtoc args = do
-    mProtocPath <- findProtoc
-    case mProtocPath of
-      Nothing ->
-          pure $ Errored args ProtocIsNotFound
-      Just protocPath -> do
-          let createProtocProcess = proc protocPath ("-o/dev/stdout" : args)
-          (!code,!bs,!err) <- readCreateProcessWithExitCode createProtocProcess ""
-          case code of
-              ExitFailure n -> pure $ Errored args $ ProtocCompileFailure n err
-              ExitSuccess -> case decodeMessage bs of
-                  Right fds -> pure $ initialState args fds
-                  Left decodeErr -> pure $ Errored args $ ProtocResultParsingError decodeErr
-
-updateSearch :: RunningState -> Search -> AppState
-updateSearch s0 search = makeState
-    (s0 ^. stateProtocArgs)
-    (s0 ^. stateFileDescriptorSet)
-    search
-    (s0 ^. stateFocus)
-
-makeState
-  :: ProtocArguments
-  -> FileDescriptorSet
-  -> Search
-  -> FocusRing WName
-  -> AppState
-makeState args fds searchStr focus =
-    Running $ RunningState {..}
-  where
-    _stateProtocArgs = args
-    _stateFileDescriptorSet = fds
-    _stateCurrentSearch =
-        newForm [ editTextField searchText SearchField (Just 1) ] searchStr
-    _stateFocus = focus
-    _stateFilteredMethodsList =
-        let allObjs = fds ^.. file . traversed . service . traversed . method . traversed
-        in list MethodsDigest (Vector.fromList $ filter (match searchStr) allObjs) 1
-    _stateFilteredServicesList =
-        let allObjs = fds ^.. file . traversed . service . traversed
-        in list ServicesDigest (Vector.fromList $ filter (match searchStr) allObjs) 1
-    _stateFilteredFilesList =
-        let allObjs = fds ^.. file . traversed
-        in list FilesDigest (Vector.fromList $ filter (match searchStr) allObjs) 1
-    _stateFilteredMessagesList =
-        let allObjs = (fds ^.. file . traversed . messageType . traversed . cosmosOf (nestedType . traversed))
-        in list MessagesDigest (Vector.fromList $ filter (match searchStr) allObjs) 1
-
-initialState :: ProtocArguments -> FileDescriptorSet -> AppState
-initialState args fds =
-    makeState args fds (Search "") defaultFocus
-  where
-    defaultFocus =
-        focusRing [ InitialView
-                  , SearchField
-                  , MessagesDigest
-                  , MethodsDigest
-                  , ServicesDigest
-                  , FilesDigest
-                  ]
-
-match :: HasLens' a "name" Text => Search -> a -> Bool
-match (Search "") _ = True
-match (Search str) obj = or [
-    Text.toLower str `Text.isInfixOf` (obj ^. name . to (Text.toLower))
-  ]
 
 handleEvent :: AppState -> BrickEvent WName AppEvent -> EventM WName (Next AppState)
 handleEvent s0 = \case

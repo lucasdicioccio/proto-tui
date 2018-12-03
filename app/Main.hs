@@ -1,6 +1,6 @@
 module Main where
 
-import Lib
+import ProtoTui
 
 main :: IO ()
 main = runMain
