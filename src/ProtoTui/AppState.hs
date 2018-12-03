@@ -9,7 +9,7 @@ module ProtoTui.AppState where
 import Brick.Focus
 import Brick.Forms
 import Brick.Widgets.List
-import Control.Lens
+import Control.Lens ((^.), (^..), (^?), traversed, cosmosOf)
 import Control.Lens.TH (makeLenses,makePrisms)
 import Data.ByteString.Char8 (ByteString)
 import Data.ProtoLens.Encoding (decodeMessage, decodeMessageOrDie)
